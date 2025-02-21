@@ -2,6 +2,7 @@
 <html lang="he">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Rocketspace</title>
     <style>
         body {
@@ -12,9 +13,15 @@
             margin: 0;
             background: #111;
             font-family: 'Arial', sans-serif;
+            overflow: hidden;
         }
         canvas {
             border: 1px solid white;
+            width: 100vw;
+            height: 100vh;
+            max-width: 800px;
+            max-height: 600px;
+            touch-action: none; /* מונע גלילה בטלפון */
         }
         #introScreen, #endScreen {
             text-align: center;
@@ -29,13 +36,13 @@
             align-items: center;
         }
         #introScreen h1, #endScreen h1 {
-            font-size: 80px;
+            font-size: 10vw; /* גודל יחסי למסך */
             text-shadow: 0 0 10px cyan, 0 0 20px blue;
             animation: glow 2s infinite alternate;
         }
         #startButton, #restartButton {
-            padding: 15px 30px;
-            font-size: 24px;
+            padding: 2vh 4vw;
+            font-size: 4vw;
             background: linear-gradient(45deg, cyan, blue);
             border: none;
             border-radius: 10px;
@@ -48,8 +55,8 @@
             transform: scale(1.1);
         }
         #endScreen p {
-            font-size: 30px;
-            margin: 20px 0;
+            font-size: 5vw;
+            margin: 2vh 0;
         }
         @keyframes glow {
             from { text-shadow: 0 0 10px cyan, 0 0 20px blue; }
@@ -59,7 +66,7 @@
             background: rgba(255, 255, 255, 0.1);
             border: 2px solid cyan;
             border-radius: 10px;
-            padding: 10px;
+            padding: 1vh 2vw;
             display: inline-block;
             text-shadow: 0 0 5px cyan;
         }
@@ -75,7 +82,7 @@
         <p id="finalScore"></p>
         <button id="restartButton">שחק שוב</button>
     </div>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas"></canvas>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -85,12 +92,16 @@
         const restartButton = document.getElementById('restartButton');
         const finalScoreText = document.getElementById('finalScore');
 
+        // התאמת גודל הקנבס למסך
+        canvas.width = Math.min(window.innerWidth, 800);
+        canvas.height = Math.min(window.innerHeight, 600);
+
         const spaceship = {
             x: canvas.width / 2,
             y: canvas.height - 50,
-            width: 60,
-            height: 50,
-            speed: 5,
+            width: canvas.width / 13, // התאמה יחסית לגודל המסך
+            height: canvas.height / 12,
+            speed: canvas.width / 100, // מהירות יחסית לגודל המסך
             wingAngle: 0,
             flameSize: 0,
             lives: 3,
@@ -104,10 +115,10 @@
         let shapes = [];
         let boss = null;
         let bossBullets = [];
-        const baseSpeed = 1;
+        const baseSpeed = canvas.height / 600; // התאמה יחסית לגובה המסך
         let particles = [];
         let stars = [];
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < Math.min(canvas.width / 8, 100); i++) { // מספר כוכבים יחסי לגודל
             stars.push({
                 x: Math.random() * canvas.width,
                 y: Math.random() * canvas.height,
@@ -118,12 +129,12 @@
         let shake = 0;
 
         const initialShapeTypes = [
-            { type: 'alien', size: 50, speed: baseSpeed, points: 10, color: 'lime', rotation: 0 },
-            { type: 'asteroid', size: 60, speed: baseSpeed * 1.5, points: 20, color: 'gray', rotation: 0 },
-            { type: 'satellite', size: 40, speed: baseSpeed * 2, points: 30, color: 'silver', rotation: 0 },
-            { type: 'debris', size: 50, speed: baseSpeed * 1.2, points: 15, color: 'brown', rotation: 0 },
-            { type: 'planet', size: 70, speed: baseSpeed * 0.8, points: 50, color: 'purple', rotation: 0, power: true },
-            { type: 'superstar', size: 40, speed: baseSpeed * 0.5, points: 100, color: 'gold', rotation: 0, special: true }
+            { type: 'alien', size: canvas.width / 16, speed: baseSpeed, points: 10, color: 'lime', rotation: 0 },
+            { type: 'asteroid', size: canvas.width / 13, speed: baseSpeed * 1.5, points: 20, color: 'gray', rotation: 0 },
+            { type: 'satellite', size: canvas.width / 20, speed: baseSpeed * 2, points: 30, color: 'silver', rotation: 0 },
+            { type: 'debris', size: canvas.width / 16, speed: baseSpeed * 1.2, points: 15, color: 'brown', rotation: 0 },
+            { type: 'planet', size: canvas.width / 11, speed: baseSpeed * 0.8, points: 50, color: 'purple', rotation: 0, power: true },
+            { type: 'superstar', size: canvas.width / 20, speed: baseSpeed * 0.5, points: 100, color: 'gold', rotation: 0, special: true }
         ];
         let shapeTypes = JSON.parse(JSON.stringify(initialShapeTypes));
 
@@ -136,14 +147,53 @@
         let spawnRate = 0.015;
         let backgroundHue = 0;
         let gameActive = false;
-        let superstarCooldown = Math.floor(Math.random() * 10800) + 7200; // 120-300 שניות (2-5 דקות)
+        let superstarCooldown = Math.floor(Math.random() * 10800) + 7200;
+
+        // שליטה במגע
+        let touchX = null;
+
+        canvas.addEventListener('touchstart', (e) => {
+            if (!gameActive) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchX = touch.clientX;
+            if (touch.clientY < canvas.height / 2) {
+                spacePressed = true; // ירי אם נוגעים בחצי העליון
+            }
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (!gameActive || touchX === null) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - touchX;
+            if (deltaX > 10) {
+                rightPressed = true;
+                leftPressed = false;
+            } else if (deltaX < -10) {
+                leftPressed = true;
+                rightPressed = false;
+            } else {
+                rightPressed = false;
+                leftPressed = false;
+            }
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            if (!gameActive) return;
+            e.preventDefault();
+            rightPressed = false;
+            leftPressed = false;
+            spacePressed = false;
+            touchX = null;
+        });
 
         function keyDownHandler(e) {
             if (!gameActive) return;
             if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = true;
             if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = true;
             if (e.key === ' ') spacePressed = true;
-            if (e.key === 'z' || e.key === 'Z') spawnSuperstar(); // כפתור סודי Z
+            if (e.key === 'z' || e.key === 'Z') spawnSuperstar();
         }
 
         function keyUpHandler(e) {
@@ -171,7 +221,7 @@
         }
 
         function spawnSuperstar() {
-            if (!gameActive || boss) return; // לא ניתן לזמן בזמן בוס
+            if (!gameActive || boss) return;
             const shape = { ...shapeTypes.find(s => s.type === 'superstar') };
             shape.x = Math.random() * (canvas.width - shape.size);
             shape.y = -shape.size;
@@ -184,9 +234,9 @@
             shapes = [];
             boss = {
                 x: canvas.width / 2,
-                y: 100,
-                width: 120,
-                height: 100,
+                y: canvas.height / 6,
+                width: canvas.width / 6.67,
+                height: canvas.height / 6,
                 health: 50 * difficultyMultiplier,
                 speed: 2 * difficultyMultiplier,
                 direction: 1,
@@ -519,10 +569,10 @@
             }
 
             if (spaceship.powerUps.speedBoost > 0) {
-                spaceship.speed = 8;
+                spaceship.speed = canvas.width / 62.5; // מהירות מוגברת יחסית
                 spaceship.powerUps.speedBoost--;
             } else {
-                spaceship.speed = 5;
+                spaceship.speed = canvas.width / 100;
             }
             if (spaceship.powerUps.strongBullets > 0) {
                 spaceship.powerUps.strongBullets--;
@@ -667,7 +717,7 @@
                     bossBullets.push({
                         x: boss.x,
                         y: boss.y + boss.height / 2,
-                        size: 20,
+                        size: canvas.width / 40,
                         speed: 5,
                         rotation: 0,
                         rotationSpeed: Math.random() * 0.1 - 0.05,
@@ -719,7 +769,7 @@
         function drawScore() {
             if (!gameActive) return;
             ctx.fillStyle = 'white';
-            ctx.font = '20px Arial';
+            ctx.font = `${canvas.width / 40}px Arial`;
             ctx.fillText(`ניקוד:`, 10, 25);
             ctx.fillText(`${score}`, 80, 25);
             ctx.fillText(`חיים:`, canvas.width - 100, 25);
