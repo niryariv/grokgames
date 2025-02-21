@@ -82,7 +82,7 @@
             z-index: 5;
         }
         .touch-button {
-            width: 18vw; /* גדול יותר מ-15vw */
+            width: 18vw;
             height: 18vw;
             background: rgba(255, 255, 255, 0.3);
             border: 2px solid cyan;
@@ -90,7 +90,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 10vw; /* חיצים גדולים יותר */
+            font-size: 10vw;
             color: white;
             text-shadow: 0 0 5px black;
             cursor: pointer;
@@ -106,16 +106,36 @@
             height: 20vw;
             background: rgba(255, 0, 0, 0.3);
             border: 2px solid red;
-            font-size: 8vw; /* אש קטנה יותר מהחיצים */
+            font-size: 8vw;
         }
         #fireButton:active {
             background: rgba(255, 0, 0, 0.5);
+        }
+        #introText {
+            position: absolute;
+            bottom: 100%;
+            width: 80%;
+            max-width: 600px;
+            color: #ffeb3b; /* צהוב בסגנון Star Wars */
+            font-size: 4vw;
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            text-shadow: 0 0 5px black;
+            animation: crawl 20s linear forwards;
+            transform: perspective(200px) rotateX(20deg);
+            z-index: 11;
+        }
+        @keyframes crawl {
+            0% { bottom: 100%; opacity: 1; }
+            80% { bottom: 0; opacity: 1; }
+            100% { bottom: 0; opacity: 0; }
         }
     </style>
 </head>
 <body>
     <div id="introScreen">
         <h1>Rocketspace</h1>
+        <div id="introText">ג׳יי הוא קצין בצבא החלליסטי.<br>יום אחד הוא קם בבוקר וראה שחייזרים מפזרים פסולת חלל בכל רחבי הגלקסיה<br>אז הוא נכנס לחללית שלו ויצא לפוצץ את הפסולת החללית</div>
         <button id="startButton">התחל משחק</button>
     </div>
     <div id="endScreen" style="display: none;">

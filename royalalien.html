@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+    <meta charset="UTF-8">
+    <title>משחק הקיבוץ והחייזרים - 20 שלבים</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            background: #000;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="1200" height="800"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // הגדרות שחקן
+        let player = {
+            x: 50,
+            y: 400,
+            width: 50,
+            height: 60,
+            speed: 10, // שחקן מהיר יותר (מ-6 ל-10)
+            weaponLevel: 1,
+            maxWeaponLevel: 3,
+            animFrame: 0,
+            aliensKilled: 0,
+            alive: true
+        };
+
+        let aliens = [];
+        let currentLevel = 1;
+        const maxLevels = 20;
+        const aliensPerLevel = 4;
+
+        function createAlien() {
+            let alienSize = 50 + (currentLevel * 2); // גודל עולה בכל שלב
+            return {
+                x: canvas.width + 50,
+                y: Math.random() * (canvas.height - alienSize),
+                width: alienSize,
+                height: alienSize,
+                speed: 2.5 + (currentLevel * 0.7), // מהירות עולה מהר יותר בכל שלב
+                alive: true,
+                animFrame: 0
+            };
+        }
+
+        function spawnAliens() {
+            aliens = [];
+            for (let i = 0; i < aliensPerLevel; i++) {
+                aliens.push(createAlien());
+            }
+        }
+
+        function resetGame() {
+            player.x = 50;
+            player.y = 400;
+            player.weaponLevel = 1;
+            player.aliensKilled = 0;
+            player.alive = true;
+            currentLevel = 1;
+            bullets = [];
+            spawnAliens();
+        }
+
+        spawnAliens();
+
+        let bullets = [];
+        let lastTime = performance.now();
+
+        // ציור רקע
+        function drawBackground() {
+            let gradient = ctx.createLinearGradient(0, 0, 0, canvas.height / 2);
+            gradient.addColorStop(0, '#1E90FF');
+            gradient.addColorStop(1, '#87CEEB');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+
+            gradient = ctx.createLinearGradient(0, canvas.height / 2, 0, canvas.height);
+            gradient.addColorStop(0, '#228B22');
+            gradient.addColorStop(1, '#006400');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(100, 600, 150, 100);
+            ctx.fillStyle = '#FF4500';
+            ctx.beginPath();
+            ctx.moveTo(100, 600);
+            ctx.lineTo(175, 550);
+            ctx.lineTo(250, 600);
+            ctx.fill();
+
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(300, 620, 120, 80);
+            ctx.fillStyle = '#FF4500';
+            ctx.beginPath();
+            ctx.moveTo(300, 620);
+            ctx.lineTo(360, 580);
+            ctx.lineTo(420, 620);
+            ctx.fill();
+
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(500, 650, 30, 80);
+            ctx.fillStyle = '#228B22';
+            ctx.beginPath();
+            ctx.arc(515, 620, 40, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ציור שחקן
+        function drawPlayer() {
+            if (player.alive) {
+                player.animFrame += 0.1;
+                let legOffset = Math.sin(player.animFrame) * 5;
+
+                ctx.fillStyle = '#0000CD';
+                ctx.beginPath();
+                ctx.arc(player.x + 25, player.y + 20, 20, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#000080';
+                ctx.fillRect(player.x + 10, player.y + 40, 10, 20 + legOffset);
+                ctx.fillRect(player.x + 30, player.y + 40, 10, 20 - legOffset);
+
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(player.x + 25, player.y, 15, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#696969';
+                ctx.save();
+                ctx.translate(player.x + 25, player.y + 20);
+                if (player.weaponLevel === 1) {
+                    ctx.fillRect(20, -5, 20, 10);
+                } else if (player.weaponLevel === 2) {
+                    ctx.fillRect(20, -10, 25, 15);
+                    ctx.fillRect(35, -5, 10, 5);
+                } else {
+                    ctx.fillRect(20, -15, 35, 10);
+                    ctx.fillRect(40, -10, 10, 5);
+                }
+                ctx.restore();
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                ctx.beginPath();
+                ctx.ellipse(player.x + 25, player.y + 60, 25, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // ציור חייזר
+        function drawAlien(alien) {
+            if (alien.alive) {
+                alien.animFrame += 0.15;
+                let wobble = Math.sin(alien.animFrame) * 3;
+
+                ctx.fillStyle = '#32CD32';
+                ctx.beginPath();
+                ctx.arc(alien.x + alien.width / 2, alien.y + alien.height / 2 + wobble, alien.width / 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath();
+                ctx.arc(alien.x + alien.width / 4, alien.y + alien.height / 4 + wobble, alien.width / 6, 0, Math.PI * 2);
+                ctx.arc(alien.x + 3 * alien.width / 4, alien.y + alien.height / 4 + wobble, alien.width / 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(alien.x + alien.width / 4, alien.y + alien.height / 4 + wobble, alien.width / 12, 0, Math.PI * 2);
+                ctx.arc(alien.x + 3 * alien.width / 4, alien.y + alien.height / 4 + wobble, alien.width / 12, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#32CD32';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(alien.x + alien.width / 4, alien.y + wobble);
+                ctx.lineTo(alien.x + alien.width / 5, alien.y - alien.height / 3 + wobble);
+                ctx.moveTo(alien.x + 3 * alien.width / 4, alien.y + wobble);
+                ctx.lineTo(alien.x + 4 * alien.width / 5, alien.y - alien.height / 3 + wobble);
+                ctx.stroke();
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                ctx.beginPath();
+                ctx.ellipse(alien.x + alien.width / 2, alien.y + alien.height, alien.width / 2, alien.height / 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // ציור כדורים
+        function drawBullets() {
+            bullets.forEach(bullet => {
+                ctx.fillStyle = '#FFD700';
+                let size = bullet.level === 1 ? 5 : bullet.level === 2 ? 8 : 12;
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, size / 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                let gradient = ctx.createRadialGradient(bullet.x, bullet.y, 0, bullet.x, bullet.y, size * 2);
+                gradient.addColorStop(0, 'rgba(255, 215, 0, 0.8)');
+                gradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, size * 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // ממשק משתמש
+        function drawUI() {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 24px Arial';
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 5;
+            ctx.fillText(`שלב: ${currentLevel}/${maxLevels}`, 20, 40);
+            ctx.fillText(`רמת נשק: ${player.weaponLevel}`, 20, 70);
+            ctx.fillText(`חייזרים חוסלו: ${player.aliensKilled}`, 20, 100);
+            if (!player.alive) {
+                ctx.fillStyle = '#FF0000';
+                ctx.font = 'bold 48px Arial';
+                ctx.fillText('Game Over', canvas.width / 2 - 100, canvas.height / 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 24px Arial';
+                ctx.fillText('לחץ רווח להתחלה מחדש', canvas.width / 2 - 150, canvas.height / 2 + 50);
+            } else if (currentLevel > maxLevels) {
+                ctx.fillStyle = '#00FF00';
+                ctx.font = 'bold 48px Arial';
+                ctx.fillText('ניצחת!', canvas.width / 2 - 100, canvas.height / 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 24px Arial';
+                ctx.fillText('לחץ רווח להתחלה מחדש', canvas.width / 2 - 150, canvas.height / 2 + 50);
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        function draw() {
+            drawBackground();
+            drawPlayer();
+            aliens.forEach(alien => drawAlien(alien));
+            drawBullets();
+            drawUI();
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (player.alive && currentLevel <= maxLevels) {
+                switch (event.key) {
+                    case 'ArrowUp': 
+                        if (player.y > 0) player.y -= player.speed; break;
+                    case 'ArrowDown': 
+                        if (player.y < canvas.height - player.height) player.y += player.speed; break;
+                    case ' ': 
+                        let bulletSpeed = player.weaponLevel === 1 ? 8 : player.weaponLevel === 2 ? 12 : 16;
+                        bullets.push({
+                            x: player.x + player.width,
+                            y: player.y + player.height / 2,
+                            speed: bulletSpeed,
+                            level: player.weaponLevel
+                        });
+                        break;
+                }
+            } else if (event.key === ' ' && (!player.alive || currentLevel > maxLevels)) {
+                resetGame();
+            }
+        });
+
+        function moveAliens(delta) {
+            aliens.forEach(alien => {
+                if (alien.alive) {
+                    let dx = player.x - alien.x;
+                    let dy = player.y - alien.y;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance > 0) {
+                        alien.x += (dx / distance) * alien.speed * delta;
+                        alien.y += (dy / distance) * alien.speed * delta;
+                    }
+
+                    if (alien.x < player.x + player.width &&
+                        alien.x + alien.width > player.x &&
+                        alien.y < player.y + player.height &&
+                        alien.y + alien.height > player.y) {
+                        player.alive = false;
+                    }
+
+                    if (alien.x < -alien.width) {
+                        alien.x = canvas.width + 50;
+                        alien.y = Math.random() * (canvas.height - alien.height);
+                    }
+                }
+            });
+        }
+
+        function moveBullets() {
+            bullets.forEach((bullet, bulletIndex) => {
+                bullet.x += bullet.speed;
+                aliens.forEach((alien, alienIndex) => {
+                    let bulletSize = bullet.level === 1 ? 5 : bullet.level === 2 ? 8 : 12;
+                    if (alien.alive &&
+                        bullet.x > alien.x && bullet.x < alien.x + alien.width &&
+                        bullet.y > alien.y && bullet.y < alien.y + alien.height) {
+                        alien.alive = false;
+                        bullets.splice(bulletIndex, 1);
+                        player.aliensKilled++;
+                        if (player.aliensKilled % 3 === 0 && player.weaponLevel < player.maxWeaponLevel) {
+                            player.weaponLevel++;
+                        }
+                    }
+                });
+                if (bullet.x > canvas.width) bullets.splice(bulletIndex, 1);
+            });
+
+            if (aliens.every(alien => !alien.alive) && currentLevel <= maxLevels) {
+                currentLevel++;
+                player.weaponLevel = 1;
+                spawnAliens();
+            }
+        }
+
+        function gameLoop(timestamp) {
+            let delta = (timestamp - lastTime) / 16;
+            lastTime = timestamp;
+
+            if (player.alive && currentLevel <= maxLevels) {
+                moveAliens(delta);
+                moveBullets();
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
