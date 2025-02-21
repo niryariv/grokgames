@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cosmo Defense</title>
+    <style>
+        canvas { border: 1px solid black; background: #1a1a2e; }
+        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0f0f23; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game state
+        const game = {
+            score: 0,
+            wave: 1,
+            ammo: 10,
+            maxAmmo: 10,
+            gameOver: false
+        };
+
+        // Turret
+        const turret = {
+            x: canvas.width / 2,
+            y: canvas.height - 50,
+            alive: true
+        };
+
+        // Colonies
+        const colonies = [
+            { x: 100, y: canvas.height - 20, alive: true },
+            { x: 200, y: canvas.height - 20, alive: true },
+            { x: 300, y: canvas.height - 20, alive: true },
+            { x: 500, y: canvas.height - 20, alive: true },
+            { x: 600, y: canvas.height - 20, alive: true },
+            { x: 700, y: canvas.height - 20, alive: true }
+        ];
+
+        // Arrays for game objects
+        let asteroids = [];
+        let lasers = [];
+
+        // Mouse position
+        let mouseX = 0, mouseY = 0;
+
+        // Event listeners
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+
+        canvas.addEventListener('click', () => {
+            if (game.ammo > 0 && !game.gameOver) {
+                fireLaser();
+                game.ammo--;
+            }
+        });
+
+        // Spawn an asteroid
+        function spawnAsteroid() {
+            const asteroid = {
+                x: Math.random() * canvas.width,
+                y: 0,
+                speed: 1 + game.wave * 0.5,
+                size: 20
+            };
+            asteroids.push(asteroid);
+        }
+
+        // Fire a laser
+        function fireLaser() {
+            const dx = mouseX - turret.x;
+            const dy = mouseY - turret.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const speed = 10;
+            const laser = {
+                x: turret.x,
+                y: turret.y,
+                vx: (dx / dist) * speed,
+                vy: (dy / dist) * speed,
+                targetX: mouseX,
+                targetY: mouseY,
+                reached: false
+            };
+            lasers.push(laser);
+        }
+
+        // Update game objects
+        function update() {
+            if (game.gameOver) return;
+
+            // Spawn asteroids
+            if (Math.random() < 0.02 * game.wave) spawnAsteroid();
+
+            // Update asteroids
+            asteroids.forEach((asteroid, i) => {
+                asteroid.y += asteroid.speed;
+                if (asteroid.y > canvas.height) asteroids.splice(i, 1);
+            });
+
+            // Update lasers
+            lasers.forEach((laser, i) => {
+                laser.x += laser.vx;
+                laser.y += laser.vy;
+                if (Math.abs(laser.x - laser.targetX) < 5 && Math.abs(laser.y - laser.targetY) < 5) {
+                    laser.reached = true;
+                    lasers.splice(i, 1);
+                }
+            });
+
+            // Collision detection
+            for (let i = asteroids.length - 1; i >= 0; i--) {
+                const asteroid = asteroids[i];
+                for (let j = lasers.length - 1; j >= 0; j--) {
+                    const laser = lasers[j];
+                    if (Math.hypot(laser.x - asteroid.x, laser.y - asteroid.y) < asteroid.size) {
+                        asteroids.splice(i, 1);
+                        lasers.splice(j, 1);
+                        game.score += 10;
+                        break;
+                    }
+                }
+
+                colonies.forEach(colony => {
+                    if (colony.alive && Math.hypot(asteroid.x - colony.x, asteroid.y - colony.y) < asteroid.size + 10) {
+                        colony.alive = false;
+                        asteroids.splice(i, 1);
+                    }
+                });
+
+                if (turret.alive && Math.hypot(asteroid.x - turret.x, asteroid.y - turret.y) < asteroid.size + 10) {
+                    turret.alive = false;
+                    asteroids.splice(i, 1);
+                }
+            }
+
+            // Recharge ammo
+            game.ammo = Math.min(game.maxAmmo, game.ammo + 0.05);
+
+            // Check game over
+            if (!turret.alive || colonies.every(c => !c.alive)) {
+                game.gameOver = true;
+            }
+
+            // Wave progression
+            if (asteroids.length === 0 && !game.gameOver) {
+                game.wave++;
+            }
+        }
+
+        // Render game
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw turret
+            if (turret.alive) {
+                ctx.fillStyle = 'lime';
+                ctx.beginPath();
+                ctx.arc(turret.x, turret.y, 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw colonies
+            colonies.forEach(colony => {
+                if (colony.alive) {
+                    ctx.fillStyle = 'cyan';
+                    ctx.fillRect(colony.x - 10, colony.y - 10, 20, 10);
+                }
+            });
+
+            // Draw asteroids
+            asteroids.forEach(asteroid => {
+                ctx.fillStyle = 'gray';
+                ctx.beginPath();
+                ctx.arc(asteroid.x, asteroid.y, asteroid.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw lasers
+            lasers.forEach(laser => {
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(turret.x, turret.y);
+                ctx.lineTo(laser.x, laser.y);
+                ctx.stroke();
+            });
+
+            // Draw UI
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Score: ${game.score}`, 10, 30);
+            ctx.fillText(`Wave: ${game.wave}`, 10, 60);
+            ctx.fillText(`Ammo: ${Math.floor(game.ammo)}`, 10, 90);
+
+            if (game.gameOver) {
+                ctx.fillStyle = 'red';
+                ctx.font = '40px Arial';
+                ctx.fillText('GAME OVER', canvas.width / 2 - 100, canvas.height / 2);
+            }
+        }
+
+        // Game loop
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
