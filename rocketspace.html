@@ -15,7 +15,6 @@
         }
         canvas {
             border: 1px solid white;
-            background: black;
             display: none;
         }
         #introScreen, #endScreen {
@@ -83,7 +82,6 @@
         const restartButton = document.getElementById('restartButton');
         const finalScoreText = document.getElementById('finalScore');
 
-        // אובייקט החללית
         const spaceship = {
             x: canvas.width / 2,
             y: canvas.height - 50,
@@ -97,6 +95,8 @@
 
         let bullets = [];
         let shapes = [];
+        let boss = null;
+        let bossBullets = [];
         const baseSpeed = 1;
         let particles = [];
         let stars = [];
@@ -110,15 +110,19 @@
         }
         let shake = 0;
         const shapeTypes = [
-            { type: 'square', size: 45, speed: baseSpeed, points: 10, color: 'green', rotation: 0 },
-            { type: 'triangle', size: 37.5, speed: baseSpeed * 1.5, points: 20, color: 'yellow', rotation: 0 },
-            { type: 'circle', size: 30, speed: baseSpeed * 2, points: 30, color: 'blue', rotation: 0 },
-            { type: 'pentagon', size: 52.5, speed: baseSpeed * 1.2, points: 15, color: 'purple', rotation: 0 }
+            { type: 'alien', size: 40, speed: baseSpeed, points: 10, color: 'lime', rotation: 0 }, // חללית חייזרים
+            { type: 'asteroid', size: 50, speed: baseSpeed * 1.5, points: 20, color: 'gray', rotation: 0 }, // אסטרואיד
+            { type: 'satellite', size: 35, speed: baseSpeed * 2, points: 30, color: 'silver', rotation: 0 }, // לוויין
+            { type: 'debris', size: 45, speed: baseSpeed * 1.2, points: 15, color: 'brown', rotation: 0 } // פסולת חלל
         ];
         let rightPressed = false;
         let leftPressed = false;
         let spacePressed = false;
         let score = 0;
+        let bossScoreThreshold = 300;
+        let difficultyMultiplier = 1;
+        let spawnRate = 0.015;
+        let backgroundHue = 0;
 
         function keyDownHandler(e) {
             if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = true;
@@ -133,12 +137,31 @@
         }
 
         function spawnShape() {
+            if (boss) return;
             const shape = { ...shapeTypes[Math.floor(Math.random() * shapeTypes.length)] };
             const x = Math.random() * (canvas.width - shape.size);
             shape.x = x;
             shape.y = -shape.size;
             shape.rotationSpeed = Math.random() * 0.05 - 0.025;
+            shape.speed *= difficultyMultiplier;
             shapes.push(shape);
+        }
+
+        function spawnBoss() {
+            shapes = []; // הסרת כל העצמים האחרים
+            boss = {
+                x: canvas.width / 2,
+                y: 100,
+                width: 100,
+                height: 80,
+                health: 50 * difficultyMultiplier,
+                speed: 2 * difficultyMultiplier,
+                direction: 1,
+                shootCooldown: 0,
+                pulse: 0, // משתנה לפעימה
+                eyeOffset: 0 // משתנה לתנועת עיניים
+            };
+            bossScoreThreshold += 300 + Math.random() * 50;
         }
 
         function createExplosion(x, y, color, isShip = false) {
@@ -226,33 +249,100 @@
             });
         }
 
+        function drawBoss() {
+            if (!boss) return;
+            ctx.save();
+            ctx.translate(boss.x, boss.y);
+
+            // אנימציית פעימה
+            const scale = 1 + Math.sin(Date.now() * 0.005 + boss.pulse) * 0.05;
+            ctx.scale(scale, scale);
+
+            // זוהר משתנה
+            const glowIntensity = 20 + Math.sin(Date.now() * 0.01) * 10;
+            ctx.shadowBlur = glowIntensity;
+            ctx.shadowColor = 'red';
+
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.moveTo(0, -boss.height / 2);
+            ctx.lineTo(-boss.width / 2, boss.height / 2);
+            ctx.lineTo(boss.width / 2, boss.height / 2);
+            ctx.closePath();
+            ctx.fill();
+
+            // אנימציית תנועת עיניים
+            const eyeMove = Math.sin(Date.now() * 0.01) * (boss.width / 8);
+            ctx.fillStyle = 'black';
+            ctx.fillRect(-boss.width / 4 + eyeMove, -boss.height / 4, boss.width / 2, 10);
+
+            ctx.restore();
+
+            // פס בריאות
+            ctx.fillStyle = 'red';
+            ctx.fillRect(boss.x - boss.width / 2, boss.y - boss.height / 2 - 20, (boss.health / (50 * difficultyMultiplier)) * boss.width, 10);
+            ctx.strokeStyle = 'white';
+            ctx.strokeRect(boss.x - boss.width / 2, boss.y - boss.height / 2 - 20, boss.width, 10);
+        }
+
+        function drawBossBullets() {
+            bossBullets.forEach(bullet => {
+                ctx.fillStyle = 'purple';
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
         function drawShapes() {
             shapes.forEach(shape => {
                 ctx.save();
                 ctx.translate(shape.x + shape.size / 2, shape.y + shape.size / 2);
                 ctx.rotate(shape.rotation);
                 ctx.fillStyle = shape.color;
-                ctx.beginPath();
-                if (shape.type === 'square') {
-                    ctx.fillRect(-shape.size / 2, -shape.size / 2, shape.size, shape.size);
-                } else if (shape.type === 'triangle') {
+
+                if (shape.type === 'alien') { // חללית חייזרים
+                    ctx.beginPath();
+                    ctx.moveTo(0, -shape.size / 2); // חרטום
+                    ctx.lineTo(-shape.size / 2, shape.size / 4);
+                    ctx.lineTo(-shape.size / 4, shape.size / 2);
+                    ctx.lineTo(shape.size / 4, shape.size / 2);
+                    ctx.lineTo(shape.size / 2, shape.size / 4);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = 'yellow';
+                    ctx.beginPath();
+                    ctx.arc(0, -shape.size / 4, 5, 0, Math.PI * 2); // חלון
+                    ctx.fill();
+                } else if (shape.type === 'asteroid') { // אסטרואיד
+                    ctx.beginPath();
                     ctx.moveTo(0, -shape.size / 2);
+                    ctx.lineTo(shape.size / 3, -shape.size / 3);
+                    ctx.lineTo(shape.size / 2, 0);
+                    ctx.lineTo(shape.size / 3, shape.size / 2);
+                    ctx.lineTo(0, shape.size / 3);
                     ctx.lineTo(-shape.size / 2, shape.size / 2);
-                    ctx.lineTo(shape.size / 2, shape.size / 2);
+                    ctx.lineTo(-shape.size / 3, 0);
                     ctx.closePath();
                     ctx.fill();
-                } else if (shape.type === 'circle') {
-                    ctx.arc(0, 0, shape.size / 2, 0, Math.PI * 2);
-                    ctx.fill();
-                } else if (shape.type === 'pentagon') {
-                    const angle = Math.PI * 2 / 5;
-                    ctx.moveTo(shape.size / 2 * Math.cos(0), shape.size / 2 * Math.sin(0));
-                    for (let i = 1; i <= 5; i++) {
-                        ctx.lineTo(shape.size / 2 * Math.cos(angle * i), shape.size / 2 * Math.sin(angle * i));
-                    }
+                } else if (shape.type === 'satellite') { // לוויין
+                    ctx.beginPath();
+                    ctx.fillRect(-shape.size / 4, -shape.size / 2, shape.size / 2, shape.size); // גוף
+                    ctx.fillStyle = 'gray';
+                    ctx.fillRect(-shape.size / 2, -shape.size / 6, shape.size, shape.size / 6); // אנטנה
+                    ctx.fillRect(-shape.size / 2, shape.size / 3, shape.size, shape.size / 6);
+                } else if (shape.type === 'debris') { // פסולת חלל
+                    ctx.beginPath();
+                    ctx.moveTo(-shape.size / 3, -shape.size / 2);
+                    ctx.lineTo(shape.size / 2, -shape.size / 3);
+                    ctx.lineTo(shape.size / 3, shape.size / 2);
+                    ctx.lineTo(-shape.size / 2, shape.size / 4);
                     ctx.closePath();
                     ctx.fill();
+                    ctx.fillStyle = 'gray';
+                    ctx.fillRect(0, 0, shape.size / 4, shape.size / 4); // חלק שבור
                 }
+
                 ctx.restore();
                 shape.rotation += shape.rotationSpeed;
             });
@@ -311,6 +401,24 @@
                         score += shape.points;
                     }
                 });
+                if (boss) {
+                    const dx = bullet.x - boss.x;
+                    const dy = bullet.y - boss.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < boss.width / 2) {
+                        boss.health--;
+                        createExplosion(bullet.x, bullet.y, 'red');
+                        bullets.splice(bIndex, 1);
+                        if (boss.health <= 0) {
+                            createExplosion(boss.x, boss.y, 'red', true);
+                            score += 100 * difficultyMultiplier;
+                            boss = null;
+                            difficultyMultiplier += 0.2;
+                            spawnRate += 0.005;
+                            shapeTypes.forEach(shape => shape.speed = baseSpeed * (shape.speed / baseSpeed) * difficultyMultiplier);
+                        }
+                    }
+                }
             });
 
             shapes.forEach((shape, index) => {
@@ -321,13 +429,53 @@
                     createExplosion(spaceship.x, spaceship.y, 'orange', true);
                     spaceship.lives--;
                     shapes.splice(index, 1);
-                    if (spaceship.lives <= 0) {
-                        endGame();
-                    }
+                    if (spaceship.lives <= 0) endGame();
                 }
             });
 
+            if (boss) {
+                boss.x += boss.speed * boss.direction;
+                if (boss.x + boss.width / 2 > canvas.width || boss.x - boss.width / 2 < 0) boss.direction *= -1;
+
+                boss.shootCooldown--;
+                if (boss.shootCooldown <= 0) {
+                    bossBullets.push({ x: boss.x, y: boss.y + boss.height / 2 });
+                    boss.shootCooldown = 30;
+                }
+
+                bossBullets.forEach((bullet, index) => {
+                    bullet.y += 5;
+                    const dx = spaceship.x - bullet.x;
+                    const dy = spaceship.y - bullet.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < spaceship.width / 2 + 5) {
+                        createExplosion(spaceship.x, spaceship.y, 'orange', true);
+                        spaceship.lives--;
+                        bossBullets.splice(index, 1);
+                        if (spaceship.lives <= 0) endGame();
+                    }
+                    if (bullet.y > canvas.height) bossBullets.splice(index, 1);
+                });
+
+                const dx = spaceship.x - boss.x;
+                const dy = (spaceship.y - spaceship.height / 2) - boss.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < (boss.width / 2 + spaceship.width / 2)) {
+                    createExplosion(spaceship.x, spaceship.y, 'orange', true);
+                    spaceship.lives--;
+                    if (spaceship.lives <= 0) endGame();
+                }
+
+                boss.pulse += 0.1; // עדכון משתנה הפעימה
+            }
+
+            if (score >= bossScoreThreshold && !boss) spawnBoss();
+
+            if (!boss && Math.random() < spawnRate) spawnShape();
+
             if (shake > 0) shake--;
+
+            backgroundHue = (backgroundHue + 1) % 360;
         }
 
         function drawScore() {
@@ -338,11 +486,22 @@
             ctx.fillText(`חיים:`, canvas.width - 100, 25);
             ctx.fillText(`${spaceship.lives}`, canvas.width - 30, 25);
 
-            // תיבות UI
             ctx.strokeStyle = 'cyan';
             ctx.lineWidth = 2;
-            ctx.strokeRect(5, 5, 100, 30); // תיבת ניקוד
-            ctx.strokeRect(canvas.width - 105, 5, 100, 30); // תיבת חיים
+            ctx.strokeRect(5, 5, 100, 30);
+            ctx.strokeRect(canvas.width - 105, 5, 100, 30);
+        }
+
+        function drawBackground() {
+            if (boss) {
+                const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+                gradient.addColorStop(0, `hsl(${backgroundHue}, 70%, 20%)`);
+                gradient.addColorStop(1, `hsl(${(backgroundHue + 180) % 360}, 70%, 20%)`);
+                ctx.fillStyle = gradient;
+            } else {
+                ctx.fillStyle = 'black';
+            }
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
         function gameLoop() {
@@ -350,17 +509,17 @@
             if (shake > 0) {
                 ctx.translate(Math.random() * shake - shake / 2, Math.random() * shake - shake / 2);
             }
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBackground();
 
             drawStars();
             drawSpaceship();
             drawBullets();
             drawShapes();
+            drawBoss();
+            drawBossBullets();
             drawParticles();
             drawScore();
             update();
-
-            if (Math.random() < 0.015) spawnShape();
 
             ctx.restore();
             requestAnimationFrame(gameLoop);
@@ -389,7 +548,13 @@
             score = 0;
             shapes = [];
             bullets = [];
+            bossBullets = [];
             particles = [];
+            boss = null;
+            bossScoreThreshold = 300;
+            difficultyMultiplier = 1;
+            spawnRate = 0.015;
+            shapeTypes.forEach(shape => shape.speed = baseSpeed * (shape.speed / baseSpeed));
             spaceship.x = canvas.width / 2;
             document.addEventListener('keydown', keyDownHandler);
             document.addEventListener('keyup', keyUpHandler);
