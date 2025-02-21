@@ -15,7 +15,6 @@
         }
         canvas {
             border: 1px solid white;
-            display: none;
         }
         #introScreen, #endScreen {
             text-align: center;
@@ -23,7 +22,11 @@
             position: absolute;
             width: 100%;
             height: 100%;
-            background: radial-gradient(circle, #1a1a3d 0%, #111 100%);
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
         #introScreen h1, #endScreen h1 {
             font-size: 80px;
@@ -90,7 +93,11 @@
             speed: 5,
             wingAngle: 0,
             flameSize: 0,
-            lives: 3
+            lives: 3,
+            invulnerable: false,
+            invulnerabilityTime: 0,
+            powerUps: { speedBoost: 0, strongBullets: 0 },
+            superstar: { active: false, time: 0 }
         };
 
         let bullets = [];
@@ -114,7 +121,9 @@
             { type: 'alien', size: 50, speed: baseSpeed, points: 10, color: 'lime', rotation: 0 },
             { type: 'asteroid', size: 60, speed: baseSpeed * 1.5, points: 20, color: 'gray', rotation: 0 },
             { type: 'satellite', size: 40, speed: baseSpeed * 2, points: 30, color: 'silver', rotation: 0 },
-            { type: 'debris', size: 50, speed: baseSpeed * 1.2, points: 15, color: 'brown', rotation: 0 }
+            { type: 'debris', size: 50, speed: baseSpeed * 1.2, points: 15, color: 'brown', rotation: 0 },
+            { type: 'planet', size: 70, speed: baseSpeed * 0.8, points: 50, color: 'purple', rotation: 0, power: true },
+            { type: 'superstar', size: 40, speed: baseSpeed * 0.5, points: 100, color: 'gold', rotation: 0, special: true }
         ];
         let shapeTypes = JSON.parse(JSON.stringify(initialShapeTypes));
 
@@ -126,24 +135,45 @@
         let difficultyMultiplier = 1;
         let spawnRate = 0.015;
         let backgroundHue = 0;
+        let gameActive = false;
+        let superstarCooldown = Math.floor(Math.random() * 10800) + 7200; // 120-300 שניות (2-5 דקות)
 
         function keyDownHandler(e) {
+            if (!gameActive) return;
             if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = true;
             if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = true;
             if (e.key === ' ') spacePressed = true;
+            if (e.key === 'z' || e.key === 'Z') spawnSuperstar(); // כפתור סודי Z
         }
 
         function keyUpHandler(e) {
+            if (!gameActive) return;
             if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = false;
             if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = false;
             if (e.key === ' ') spacePressed = false;
         }
 
         function spawnShape() {
-            if (boss) return;
-            const shape = { ...shapeTypes[Math.floor(Math.random() * shapeTypes.length)] };
+            if (boss || !gameActive) return;
+            let shapeType = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
+            if (shapeType.type === 'planet' && Math.random() > 0.05) return;
+            if (shapeType.type === 'superstar') {
+                if (superstarCooldown > 0) return;
+                superstarCooldown = Math.floor(Math.random() * 10800) + 7200;
+            }
+            const shape = { ...shapeType };
             const x = Math.random() * (canvas.width - shape.size);
             shape.x = x;
+            shape.y = -shape.size;
+            shape.rotationSpeed = Math.random() * 0.05 - 0.025;
+            shape.speed *= difficultyMultiplier;
+            shapes.push(shape);
+        }
+
+        function spawnSuperstar() {
+            if (!gameActive || boss) return; // לא ניתן לזמן בזמן בוס
+            const shape = { ...shapeTypes.find(s => s.type === 'superstar') };
+            shape.x = Math.random() * (canvas.width - shape.size);
             shape.y = -shape.size;
             shape.rotationSpeed = Math.random() * 0.05 - 0.025;
             shape.speed *= difficultyMultiplier;
@@ -201,12 +231,16 @@
                 ctx.beginPath();
                 ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
                 ctx.fill();
-                star.y += star.speed;
-                if (star.y > canvas.height) star.y = -star.size;
+                if (gameActive) {
+                    star.y += star.speed;
+                    if (star.y > canvas.height) star.y = -star.size;
+                }
             });
         }
 
         function drawSpaceship() {
+            if (!gameActive) return;
+
             spaceship.wingAngle = Math.sin(Date.now() * 0.01) * 5;
             spaceship.flameSize = (rightPressed || leftPressed) ? Math.random() * 10 + 15 : 10;
 
@@ -215,7 +249,15 @@
             ctx.shadowBlur = 20;
             ctx.shadowColor = 'cyan';
 
-            ctx.fillStyle = 'silver';
+            if (spaceship.invulnerable && !spaceship.superstar.active && Math.floor(Date.now() / 100) % 2 === 0) {
+                ctx.globalAlpha = 0.5;
+            }
+            if (spaceship.superstar.active) {
+                ctx.fillStyle = `hsl(${Date.now() % 360}, 100%, 50%)`;
+            } else {
+                ctx.fillStyle = 'silver';
+            }
+
             ctx.beginPath();
             ctx.moveTo(0, -spaceship.height / 2);
             ctx.lineTo(-spaceship.width / 2, spaceship.height / 2);
@@ -223,7 +265,7 @@
             ctx.closePath();
             ctx.fill();
 
-            ctx.fillStyle = 'darkgray';
+            ctx.fillStyle = spaceship.superstar.active ? `hsl(${(Date.now() + 90) % 360}, 100%, 50%)` : 'darkgray';
             ctx.beginPath();
             ctx.moveTo(-spaceship.width / 2, spaceship.height / 2);
             ctx.lineTo(-spaceship.width / 2 - 15, spaceship.height + spaceship.wingAngle);
@@ -248,7 +290,7 @@
             ctx.lineTo(spaceship.width / 8, spaceship.height / 2);
             ctx.fill();
 
-            ctx.fillStyle = 'cyan';
+            ctx.fillStyle = spaceship.superstar.active ? `hsl(${(Date.now() + 180) % 360}, 100%, 50%)` : 'cyan';
             ctx.beginPath();
             ctx.arc(0, -spaceship.height / 4, 8, 0, Math.PI * 2);
             ctx.fill();
@@ -322,13 +364,28 @@
             bossBullets.forEach(bullet => {
                 ctx.save();
                 ctx.translate(bullet.x, bullet.y);
-                ctx.fillStyle = 'purple';
+                ctx.rotate(bullet.rotation || 0);
+                ctx.fillStyle = bullet.color || 'gray';
+
+                const size = bullet.size || 20;
                 ctx.beginPath();
-                ctx.arc(0, 0, 7, 0, Math.PI * 2);
+                ctx.moveTo(0, -size / 2);
+                ctx.lineTo(size / 3, -size / 3);
+                ctx.lineTo(size / 2, 0);
+                ctx.lineTo(size / 3, size / 2);
+                ctx.lineTo(0, size / 3);
+                ctx.lineTo(-size / 2, size / 2);
+                ctx.lineTo(-size / 3, 0);
+                ctx.closePath();
                 ctx.fill();
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = 'purple';
+
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = bullet.color || 'gray';
                 ctx.restore();
+
+                if (gameActive) {
+                    bullet.rotation = (bullet.rotation || 0) + (bullet.rotationSpeed || 0.05);
+                }
             });
         }
 
@@ -400,10 +457,32 @@
                     ctx.beginPath();
                     ctx.arc(-shape.size / 4, -shape.size / 4, 10, 0, Math.PI * 2);
                     ctx.fill();
+                } else if (shape.type === 'planet') {
+                    ctx.fillStyle = shape.color;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, shape.size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.beginPath();
+                    ctx.arc(shape.size / 4, shape.size / 4, shape.size / 3, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (shape.type === 'superstar') {
+                    ctx.fillStyle = shape.color;
+                    ctx.beginPath();
+                    const points = 5;
+                    const outerRadius = shape.size / 2;
+                    const innerRadius = shape.size / 4;
+                    for (let i = 0; i < points * 2; i++) {
+                        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                        const angle = (i * Math.PI) / points;
+                        ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
                 }
 
                 ctx.restore();
-                shape.rotation += shape.rotationSpeed;
+                if (gameActive) shape.rotation += shape.rotationSpeed;
             });
         }
 
@@ -419,15 +498,44 @@
                 ctx.shadowBlur = 10;
                 ctx.shadowColor = particle.color;
                 ctx.restore();
-                particle.x += particle.speedX;
-                particle.y += particle.speedY;
-                particle.life--;
-                particle.size *= 0.95;
-                if (particle.life <= 0) particles.splice(index, 1);
+                if (gameActive) {
+                    particle.x += particle.speedX;
+                    particle.y += particle.speedY;
+                    particle.life--;
+                    particle.size *= 0.95;
+                    if (particle.life <= 0) particles.splice(index, 1);
+                }
             });
         }
 
         function update() {
+            if (!gameActive) return;
+
+            if (spaceship.invulnerable) {
+                spaceship.invulnerabilityTime--;
+                if (spaceship.invulnerabilityTime <= 0) {
+                    spaceship.invulnerable = false;
+                }
+            }
+
+            if (spaceship.powerUps.speedBoost > 0) {
+                spaceship.speed = 8;
+                spaceship.powerUps.speedBoost--;
+            } else {
+                spaceship.speed = 5;
+            }
+            if (spaceship.powerUps.strongBullets > 0) {
+                spaceship.powerUps.strongBullets--;
+            }
+            if (spaceship.superstar.active) {
+                spaceship.superstar.time--;
+                spaceship.invulnerable = true;
+                if (spaceship.superstar.time <= 0) {
+                    spaceship.superstar.active = false;
+                    spaceship.invulnerable = false;
+                }
+            }
+
             if (rightPressed && spaceship.x + spaceship.width / 2 + 15 < canvas.width) {
                 spaceship.x += spaceship.speed;
             }
@@ -436,7 +544,13 @@
             }
 
             if (spacePressed && bullets.length < 10) {
-                bullets.push({ x: spaceship.x, y: spaceship.y - spaceship.height / 2 });
+                if (spaceship.superstar.active) {
+                    bullets.push({ x: spaceship.x, y: spaceship.y - spaceship.height / 2 });
+                    bullets.push({ x: spaceship.x - 10, y: spaceship.y - spaceship.height / 2 });
+                    bullets.push({ x: spaceship.x + 10, y: spaceship.y - spaceship.height / 2 });
+                } else {
+                    bullets.push({ x: spaceship.x, y: spaceship.y - spaceship.height / 2 });
+                }
                 spacePressed = false;
             }
 
@@ -460,10 +574,24 @@
                     const dy = bullet.y - (shape.y + shape.size / 2);
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     if (distance < shape.size / 2 + 2) {
-                        createExplosion(shape.x + shape.size / 2, shape.y + shape.size / 2, shape.color);
-                        shapes.splice(sIndex, 1);
+                        if (shape.type === 'planet') {
+                            const power = Math.floor(Math.random() * 3);
+                            if (power === 0) spaceship.powerUps.speedBoost = 300;
+                            else if (power === 1 && spaceship.lives < 5) spaceship.lives++;
+                            else if (power === 2) spaceship.powerUps.strongBullets = 300;
+                            createExplosion(shape.x + shape.size / 2, shape.y + shape.size / 2, shape.color);
+                            shapes.splice(sIndex, 1);
+                        } else if (shape.type === 'superstar') {
+                            spaceship.superstar.active = true;
+                            spaceship.superstar.time = 3600;
+                            createExplosion(shape.x + shape.size / 2, shape.y + shape.size / 2, shape.color);
+                            shapes.splice(sIndex, 1);
+                        } else {
+                            createExplosion(shape.x + shape.size / 2, shape.y + shape.size / 2, shape.color);
+                            shapes.splice(sIndex, 1);
+                            score += shape.points;
+                        }
                         bullets.splice(bIndex, 1);
-                        score += shape.points;
                     }
                 });
                 if (boss) {
@@ -471,7 +599,7 @@
                     const dy = bullet.y - boss.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     if (distance < boss.width / 2) {
-                        boss.health--;
+                        boss.health -= spaceship.powerUps.strongBullets > 0 ? 2 : 1;
                         createExplosion(bullet.x, bullet.y, 'red');
                         bullets.splice(bIndex, 1);
                         if (boss.health <= 0) {
@@ -484,17 +612,49 @@
                         }
                     }
                 }
+                bossBullets.forEach((bossBullet, bbIndex) => {
+                    const dx = bullet.x - bossBullet.x;
+                    const dy = bullet.y - bossBullet.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < (bossBullet.size || 20) / 2 + 2) {
+                        bossBullet.hits = (bossBullet.hits || 0) + 1;
+                        bullets.splice(bIndex, 1);
+                        if (bossBullet.hits === 1) {
+                            bossBullet.size = (bossBullet.size || 20) * 0.7;
+                            createExplosion(bullet.x, bullet.y, 'gray');
+                        } else if (bossBullet.hits === 2) {
+                            createExplosion(bossBullet.x, bossBullet.y, 'gray');
+                            bossBullets.splice(bbIndex, 1);
+                        }
+                    }
+                });
             });
 
             shapes.forEach((shape, index) => {
                 const dx = spaceship.x - (shape.x + shape.size / 2);
                 const dy = (spaceship.y - spaceship.height / 2) - (shape.y + shape.size / 2);
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < (shape.size / 2 + spaceship.width / 2)) {
-                    createExplosion(spaceship.x, spaceship.y, 'orange', true);
-                    spaceship.lives--;
-                    shapes.splice(index, 1);
-                    if (spaceship.lives <= 0) endGame();
+                if (distance < (shape.size / 2 + spaceship.width / 2) && !spaceship.invulnerable) {
+                    if (shape.type === 'planet') {
+                        const power = Math.floor(Math.random() * 3);
+                        if (power === 0) spaceship.powerUps.speedBoost = 300;
+                        else if (power === 1 && spaceship.lives < 5) spaceship.lives++;
+                        else if (power === 2) spaceship.powerUps.strongBullets = 300;
+                        createExplosion(shape.x + shape.size / 2, shape.y + shape.size / 2, shape.color);
+                        shapes.splice(index, 1);
+                        score += shape.points;
+                    } else if (shape.type === 'superstar') {
+                        spaceship.superstar.active = true;
+                        spaceship.superstar.time = 3600;
+                        createExplosion(shape.x + shape.size / 2, shape.y + shape.size / 2, shape.color);
+                        shapes.splice(index, 1);
+                        score += shape.points;
+                    } else {
+                        createExplosion(spaceship.x, spaceship.y, 'orange', true);
+                        spaceship.lives--;
+                        shapes.splice(index, 1);
+                        if (spaceship.lives <= 0) endGame();
+                    }
                 }
             });
 
@@ -504,18 +664,29 @@
 
                 boss.shootCooldown--;
                 if (boss.shootCooldown <= 0) {
-                    bossBullets.push({ x: boss.x, y: boss.y + boss.height / 2 });
+                    bossBullets.push({
+                        x: boss.x,
+                        y: boss.y + boss.height / 2,
+                        size: 20,
+                        speed: 5,
+                        rotation: 0,
+                        rotationSpeed: Math.random() * 0.1 - 0.05,
+                        hits: 0,
+                        color: 'gray'
+                    });
                     boss.shootCooldown = 30;
                 }
 
                 bossBullets.forEach((bullet, index) => {
-                    bullet.y += 5;
+                    bullet.y += bullet.speed || 5;
                     const dx = spaceship.x - bullet.x;
                     const dy = spaceship.y - bullet.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance < spaceship.width / 2 + 7) {
+                    if (distance < spaceship.width / 2 + (bullet.size || 20) / 2 && !spaceship.invulnerable) {
                         createExplosion(spaceship.x, spaceship.y, 'orange', true);
                         spaceship.lives--;
+                        spaceship.invulnerable = true;
+                        spaceship.invulnerabilityTime = Math.floor(Math.random() * 150) + 30;
                         bossBullets.splice(index, 1);
                         if (spaceship.lives <= 0) endGame();
                     }
@@ -525,9 +696,11 @@
                 const dx = spaceship.x - boss.x;
                 const dy = (spaceship.y - spaceship.height / 2) - boss.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < (boss.width / 2 + spaceship.width / 2)) {
+                if (distance < (boss.width / 2 + spaceship.width / 2) && !spaceship.invulnerable) {
                     createExplosion(spaceship.x, spaceship.y, 'orange', true);
                     spaceship.lives--;
+                    spaceship.invulnerable = true;
+                    spaceship.invulnerabilityTime = Math.floor(Math.random() * 150) + 30;
                     if (spaceship.lives <= 0) endGame();
                 }
             }
@@ -536,12 +709,15 @@
 
             if (!boss && Math.random() < spawnRate) spawnShape();
 
+            if (superstarCooldown > 0) superstarCooldown--;
+
             if (shake > 0) shake--;
 
             backgroundHue = (backgroundHue + 1) % 360;
         }
 
         function drawScore() {
+            if (!gameActive) return;
             ctx.fillStyle = 'white';
             ctx.font = '20px Arial';
             ctx.fillText(`ניקוד:`, 10, 25);
@@ -590,40 +766,30 @@
 
         function startGame() {
             introScreen.style.display = 'none';
-            canvas.style.display = 'block';
+            endScreen.style.display = 'none';
+            gameActive = true;
             document.addEventListener('keydown', keyDownHandler);
             document.addEventListener('keyup', keyUpHandler);
+            superstarCooldown = Math.floor(Math.random() * 10800) + 7200;
             gameLoop();
         }
 
         function endGame() {
-            canvas.style.display = 'none';
-            endScreen.style.display = 'block';
+            gameActive = false;
+            endScreen.style.display = 'flex';
             finalScoreText.textContent = `ניקוד סופי: ${score}`;
             document.removeEventListener('keydown', keyDownHandler);
             document.removeEventListener('keyup', keyUpHandler);
         }
 
         function restartGame() {
-            endScreen.style.display = 'none';
-            canvas.style.display = 'block';
-            spaceship.lives = 3;
-            score = 0;
-            shapes = [];
-            bullets = [];
-            bossBullets = [];
-            particles = [];
-            boss = null;
-            bossScoreThreshold = 300;
-            difficultyMultiplier = 1;
-            spawnRate = 0.015;
-            shapeTypes = JSON.parse(JSON.stringify(initialShapeTypes));
-            spaceship.x = canvas.width / 2;
-            backgroundHue = 0;
-            document.addEventListener('keydown', keyDownHandler);
-            document.addEventListener('keyup', keyUpHandler);
-            gameLoop();
+            location.reload();
         }
+
+        introScreen.style.display = 'flex';
+        endScreen.style.display = 'none';
+        gameActive = false;
+        gameLoop();
 
         startButton.addEventListener('click', startGame);
         restartButton.addEventListener('click', restartGame);
